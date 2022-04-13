@@ -1,103 +1,91 @@
+import numpy as np
 import random
-
-#Function ensure_bounds(asegura limites)
-def ensure_bounds(vec, bounds):
-    vec_new = []
-    # cycle through each variable in vector 
-    for i in range(len(vec)):
-
-        # variable exceedes the minimum boundary
-        if vec[i] < bounds[i][0]:
-            vec_new.append(bounds[i][0])
-
-        # variable exceedes the maximum boundary
-        if vec[i] > bounds[i][1]:
-            vec_new.append(bounds[i][1])
-
-        # the variable is fine
-        if bounds[i][0] <= vec[i] <= bounds[i][1]:
-            vec_new.append(vec[i])
-        
-    return vec_new
+import math 
 
 
-def solve(cost_func,bounds, popsize, mutate, recombination, maxiter,population):
+def ensure_bounds(v_donor,ub,lb):
+  v_new = []
+  for i in range(0,len(v_donor)):
+    if v_donor[i] < lb[i]:
+      v_new.append(lb[i])
+    if v_donor[i] > ub[i]:
+      v_new.append(ub[i])
+    if lb[i] <= v_donor[i] <= ub[i]:
+      v_new.append(v_donor[i])
+  return v_new
+  
+#STEP 1: INITIALIZE A POPULATION
+def init_population(np,lb,ub):      #Se inicializa la poblacion con valores al a azar
+  print("%--------------- Poblacion ------------ %")  
+  population = []        
+  for i in range(0,np):            #Agrega a la matriz los difrentes valores
+    indv = []
+    for j in range(0,len(lb)):
+      x=lb[1] + random.uniform(0,1)*(ub[1]-lb[1]) 
+      indv.append(x)
+    population.append(indv)
+    print(indv,"\n")
+  print("%--------------- Poblacion ------------ %")  
+  return population
 
-    # cycle through each generation (step #2)
-    for i in range(1,maxiter+1):
-        print("GENERATION:",i)
 
-        gen_scores = [] # score keeping
 
-        # cycle through each individual in the population
-        for j in range(0, popsize):
+def solve(population,t,f_mutate,np,p_recom,ub,lb,cost_obj):
+  v_candidates = []
+  x_diff = []
+  v_donor = []
+  
+  #Step 3.1 = Mutacion
+  for i in range(0,t): 
+    gen_scores = []    
+    print("-- Generacion ",i+1,"--\n")
+    for j in range (np):
+      #Generate candidate list
+      v_candidates = range(0,np)           #Genera un arreglo con diferentes numeros de 0 a np
+      ranid=random.sample(v_candidates,4)  #Escoje 3 candidatos al azar
 
-            #--- MUTATION (step #3.A) ---------------------+
+      #-target vectors-
+      #print("--Target Vector--")
+      x_1=population[ranid[0]] 
+      #print("x_1 = ",x_1)
+      x_2=population[ranid[1]]
+      #print("x_2 = ",x_2)
+      x_3=population[ranid[2]]
+      #print("x_3 = ",x_3)
+      x_t=population[ranid[3]]
+      #print("x_t = ",x_t )
             
-            # select three random vector index positions [0, popsize), not including current vector (j)
-            canidates = range(0,popsize)
-            random_index = random.sample(canidates, 4)
+      #subtract between x_2, x_3
+      x_diff = [x_2_i - x_3_i for x_2_i,x_3_i in zip(x_2,x_3)]
+      #multiply x_1 with mutate function 
+      v_donor = [x_1_i + f_mutate * x_diff_i for x_1_i, x_diff_i in zip(x_1,x_diff)]       #Se crean los vectores de ruido
+      v_donor = ensure_bounds(v_donor,ub,lb)    #Vector ruido
+      #print("Donor vector = ",v_donor)
+      #Step 3.2 = Recombinacion
+      v_trial = []
+      rdm_recom = random.uniform(0,1)  #Numero random entre 0 y 1
+      
+      for k in range(0,len(x_t)):
+        if (rdm_recom <= p_recom):
+          v_trial.append(v_donor[k])     
+        else:
+          v_trial.append(x_t[k]) 
 
-            x_1 = population[random_index[0]]
-            x_2 = population[random_index[1]]
-            x_3 = population[random_index[2]]
-            x_t = population[random_index[3]]
+      #Step 3.3 = Seleccion
+      #Recombinacion de los vectores
+      score_trial =  cost_obj(v_trial)
+      score_target = cost_obj(x_t)
+      if score_trial < score_target:
+          population[j] =v_trial
+          gen_scores.append(score_trial)
+      else:
+          gen_scores.append(score_target)
+      gen_prom = sum(gen_scores)/np
+      gen_best = min(gen_scores)
+      gen_sol  = population[gen_scores.index(min(gen_scores))]
 
-            # subtract x3 from x2, and create a new vector (x_diff)
-            x_diff = [x_2_i - x_3_i for x_2_i, x_3_i in zip(x_2, x_3)]
-
-            # multiply x_diff by the mutation factor (F) and add to x_1
-            v_donor = [x_1_i + mutate * x_diff_i for x_1_i, x_diff_i in zip(x_1, x_diff)]
-            v_donor = ensure_bounds(v_donor, bounds)
-
-            #--- RECOMBINATION (step #3.B) ----------------+
-
-            v_trial = []
-            for k in range(len(x_t)):
-                crossover = random.random()
-                if crossover <= recombination:
-                    v_trial.append(v_donor[k])
-
-                else:
-                    v_trial.append(x_t[k])
-                    
-            #--- GREEDY SELECTION (step #3.C) -------------+
-
-            score_trial  = cost_func(v_trial)
-            score_target = cost_func(x_t)
-
-            if score_trial < score_target:
-                population[j] = v_trial
-                gen_scores.append(score_trial)
-                print ("   >",score_trial, v_trial)
-
-            else:
-                print("   >",score_target, x_t)
-                gen_scores.append(score_target)
-
-        #--- SCORE KEEPING --------------------------------+
-
-        gen_avg = sum(gen_scores) / popsize                         # current generation avg. fitness
-        gen_best = min(gen_scores)                                  # fitness of best individual
-        gen_sol = population[gen_scores.index(min(gen_scores))]     # solution of best individual
-
-        print ("      > GENERATION AVERAGE:",gen_avg)
-        print ("      > GENERATION BEST:",gen_best)
-        print ("      > BEST SOLUTION:",gen_sol,'\n')
-
-    return gen_sol
-
-
-#STEP 1: INITIALIZE A POPULATION 
-def init_popula(popsize,bounds):
-    population = []
-    for i in range(0,popsize):
-        indv = []
-        for j in range(len(bounds)):
-            indv.append(random.uniform(bounds[j][0],bounds[j][1]))
-        population.append(indv)
-    return population
-
-
-
-
+    print("Current gen. avg.fitness : ",gen_prom)
+    print("Best individual fitness :",gen_best)
+    print("Best solution individual :",gen_sol,"\n")
+    print("-----------------\n")  
+  return gen_sol
